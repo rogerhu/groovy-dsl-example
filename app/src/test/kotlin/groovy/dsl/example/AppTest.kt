@@ -16,8 +16,9 @@ class AppTest {
     @Test fun useDelegateClass() {
         class BasicDelegate {
             lateinit var android: Closure<Any>
-            fun square(android: Closure<Any>) {
+            fun square(android: Closure<Any>): BasicDelegate {
                 this.android = android
+                return this
             }
         }
 
@@ -80,18 +81,16 @@ square {
                 val argsArray = args as Array<Object>
 
                 argsArray.forEach {
-                    var cl = it as? Closure<Script>
-                    // Recursive strategy for getting nested closures
-                    if (cl is Closure<Script>) {
+                   (it as? Closure<Script>)?.apply {
+                        // Recursive strategy for getting nested closures
                         val sq = RecursiveMethodMissingDelegate()
-                        cl.delegate = sq
+                        delegate = sq
                         // If we don't set this resolution strategy, the methodMissing from the parent
                         // closure will be used.
-                        cl.resolveStrategy = Closure.DELEGATE_ONLY
-                        cl.run()
+                        resolveStrategy = Closure.DELEGATE_ONLY
+                        run()
                         objects[name] = sq.objects
-                    }
-                    else {
+                    } ?: run {
                         objects[name] = it
                     }
                 }
@@ -115,7 +114,7 @@ square {
         val android = (result.objects.get("square") as HashMap<*, *>).get("android") as HashMap<*, *>
         assertEquals(android.size, 2)
         assertEquals(android.get("namespace"), "com.squareup.apos")
-        assertEquals(android.get("useVectorDrawablesSupportLibrary"), "true")
+        assertEquals(android.get("useVectorDrawablesSupportLibrary"), true)
 
     }
 }
