@@ -37,8 +37,6 @@ square {
     }
 
     @Test fun MethodMissingDelegate() {
-        // Turns out the class needs to inherit from GroovyObject for the method resolution
-        // https://stackoverflow.com/questions/3588563/groovy-methodmissing
         class MethodMissingDelegate {
             var objects: HashMap<String, Any> = HashMap()
 
@@ -60,6 +58,7 @@ square {
         script.delegate = MethodMissingDelegate()
         val result = script.run() as MethodMissingDelegate
         assertEquals(result.objects.size, 1)
+        assertNotNull(result.objects.get("square"))
     }
 
     // Test inspired from https://wiki.lappsgrid.org/technical/dsl.html
