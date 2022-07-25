@@ -3,11 +3,120 @@
  */
 package groovy.dsl.example
 
+import groovy.lang.*
+import groovy.util.DelegatingScript
+import org.codehaus.groovy.control.CompilerConfiguration
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
+
 class AppTest {
-    @Test fun appHasAGreeting() {
+    // Test inspired from https://github.com/apache/groovy/blob/e6ce56fc27e7640664946eb1a99bdee6fb63547e/src/test/groovy/util/DelegatingScriptTest.groovy
+    @Test fun useDelegateClass() {
+        class BasicDelegate {
+            lateinit var android: Closure<Any>
+            fun square(android: Closure<Any>) {
+                this.android = android
+            }
+        }
+
+        val config = CompilerConfiguration()
+        config.scriptBaseClass = DelegatingScript::class.simpleName
+        val shell = GroovyShell(config)
+        val script = shell.parse("""
+square {
+  android {
+    namespace 'com.squareup.apos'
+    useVectorDrawablesSupportLibrary true
+  }
+}""") as DelegatingScript
+        script.delegate = BasicDelegate()
+        val result = script.run() as BasicDelegate
+        assertNotNull(result.android)
+    }
+
+    @Test fun MethodMissingDelegate() {
+        // Turns out the class needs to inherit from GroovyObject for the method resolution
+        // https://stackoverflow.com/questions/3588563/groovy-methodmissing
+        class MethodMissingDelegate {
+            var objects: HashMap<String, Any> = HashMap()
+
+            fun methodMissing(name: String, args: Any): MethodMissingDelegate {
+                objects[name] = args
+                return this
+            }
+        }
+        val config = CompilerConfiguration()
+        config.scriptBaseClass = DelegatingScript::class.simpleName
+        val shell = GroovyShell(config)
+        val script = shell.parse("""
+square {
+  android {
+    namespace 'com.squareup.apos'
+    useVectorDrawablesSupportLibrary true
+  }
+}""") as DelegatingScript
+        script.delegate = MethodMissingDelegate()
+        val result = script.run() as MethodMissingDelegate
+        assertEquals(result.objects.size, 1)
+    }
+
+    // Test inspired from https://wiki.lappsgrid.org/technical/dsl.html
+    @Test fun recursiveMethodMissingDelegate() {
+        // Turns out the class needs to inherit from GroovyObject for the method resolution
+        // https://stackoverflow.com/questions/3588563/groovy-methodmissing
+        class RecursiveMethodMissingDelegate: GroovyObject {
+            var objects: HashMap<String, Any> = HashMap()
+
+            override fun getMetaClass(): MetaClass {
+                val registry = GroovySystem.getMetaClassRegistry()
+                return registry.getMetaClass(RecursiveMethodMissingDelegate::class.java)
+            }
+
+            override fun setMetaClass(metaClass: MetaClass?) {
+            }
+
+            fun methodMissing(name: String, args: Any): RecursiveMethodMissingDelegate {
+                val argsArray = args as Array<Object>
+
+                argsArray.forEach {
+                    var cl = it as? Closure<Script>
+                    // Recursive strategy for getting nested closures
+                    if (cl is Closure<Script>) {
+                        val sq = RecursiveMethodMissingDelegate()
+                        cl.delegate = sq
+                        // If we don't set this resolution strategy, the methodMissing from the parent
+                        // closure will be used.
+                        cl.resolveStrategy = Closure.DELEGATE_ONLY
+                        cl.run()
+                        objects[name] = sq.objects
+                    }
+                    else {
+                        objects[name] = it
+                    }
+                }
+                return this
+            }
+        }
+        val config = CompilerConfiguration()
+        config.scriptBaseClass = DelegatingScript::class.simpleName
+        val shell = GroovyShell(config)
+        val script = shell.parse("""
+square {
+  android {
+    namespace 'com.squareup.apos'
+    useVectorDrawablesSupportLibrary true
+  }
+}""") as DelegatingScript
+        script.delegate = RecursiveMethodMissingDelegate()
+        val result = script.run() as RecursiveMethodMissingDelegate
+        assertEquals(result.objects.size, 1)
+
+        val android = (result.objects.get("square") as HashMap<*, *>).get("android") as HashMap<*, *>
+        assertEquals(android.size, 2)
+        assertEquals(android.get("namespace"), "com.squareup.apos")
+        assertEquals(android.get("useVectorDrawablesSupportLibrary"), "true")
 
     }
 }
