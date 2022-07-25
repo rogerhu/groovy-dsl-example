@@ -88,7 +88,7 @@ square {
                         // If we don't set this resolution strategy, the methodMissing from the parent
                         // closure will be used.
                         resolveStrategy = Closure.DELEGATE_ONLY
-                        run()
+                        call()
                         objects[name] = sq.objects
                     } ?: run {
                         objects[name] = it
